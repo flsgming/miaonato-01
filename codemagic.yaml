@@ -12,7 +12,7 @@ workflows:
         IPA_NAME: "GamePort_miao.ipa"
         CREDIT_TEXT: "Port by Miaomiaocutene"
         CREDIT_URL: "https://discord.com/users/893716299014873088"
-        TITLE_ID: ""
+        TITLE_ID: "010084D00CF5E000"
         USE_UPDATE: "false"
         USE_DLC: "false"
         USE_VH: "false"
