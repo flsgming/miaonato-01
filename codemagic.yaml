@@ -4,7 +4,7 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 120
     environment:
-      xcode: 27.2
+      xcode: 27.0
       vars:
         CHIP_PRESET: "under_a17"
         PACKAGING_MODE: "separate_both"
@@ -12,7 +12,7 @@ workflows:
         IPA_NAME: "GamePort_miao.ipa"
         CREDIT_TEXT: "Port by Miaomiaocutene"
         CREDIT_URL: "https://discord.com/users/893716299014873088"
-        TITLE_ID: "010084D00CF5E000"
+        TITLE_ID: "auto"
         USE_UPDATE: "false"
         USE_DLC: "false"
         USE_VH: "false"
@@ -60,7 +60,7 @@ workflows:
           fi
           xcrun -sdk iphoneos metal --version || true
 
-          HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install xcodegen zstd spirv-cross glslang jq p7zip || true
+          HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install xcodegen zstd spirv-cross glslang jq p7zip unar || true
           for tool in xcodegen zstd spirv-cross glslangValidator jq 7z; do
             command -v "$tool" >/dev/null 2>&1 || { echo "ERROR: Missing required tool: $tool"; exit 1; }
           done
@@ -123,7 +123,7 @@ workflows:
           fi
 
           # 3. 60 FPS override
-          if [ "$ENABLE_60FPS" = "true" ] && [ -n "$TITLE_ID" ] && [ -f "src/dm/games/$TITLE_ID/game.tsv" ]; then
+          if [ "$ENABLE_60FPS" = "true" ] && [ -n "${TITLE_ID:-}" ] && [ "${TITLE_ID:-}" != "auto" ] && [ -f "src/dm/games/$TITLE_ID/game.tsv" ]; then
             python3 - <<'PY'
           import os
           tsv = f"src/dm/games/{os.environ['TITLE_ID']}/game.tsv"
@@ -324,12 +324,24 @@ workflows:
             fi
           }
 
+          extract_archive() {
+            local arc="$1"
+            local dst="$2"
+            local lower
+            lower="$(echo "$arc" | tr '[:upper:]' '[:lower:]')"
+            if [[ "$lower" == *.rar ]] && command -v unar >/dev/null 2>&1; then
+              unar -f -q -o "$dst" "$arc"
+            else
+              7z x -y "$arc" -o"$dst" >/dev/null || unar -f -q -o "$dst" "$arc"
+            fi
+            rm -f "$arc"
+          }
+
           download_any "$KEYS_URL" "keys_dir" "true"
           download_any "$GAME_URL" "game_files" "true"
           if [ "$USE_UPDATE" = "true" ] && [ -n "$UPDATE_URL" ]; then download_any "$UPDATE_URL" "game_files" "true"; fi
           while IFS= read -r -d '' arc; do
-            7z x -y "$arc" -ogame_files >/dev/null
-            rm -f "$arc"
+            extract_archive "$arc" "game_files"
           done < <(find game_files -maxdepth 2 -type f \( -iname "*.zip" -o -iname "*.rar" -o -iname "*.7z" \) -print0)
           find game_files -mindepth 2 -type f -exec mv -f {} game_files/ \;
           find game_files -mindepth 1 -type d -empty -delete
@@ -337,8 +349,7 @@ workflows:
             mkdir -p dlc_raw
             download_any "$DLC_URL" "dlc_raw" "false"
             while IFS= read -r -d '' arc; do
-              7z x -y "$arc" -odlc_raw >/dev/null
-              rm -f "$arc"
+              extract_archive "$arc" "dlc_raw"
             done < <(find dlc_raw -maxdepth 3 -type f \( -iname "*.zip" -o -iname "*.rar" -o -iname "*.7z" \) -print0)
             find dlc_raw -type f \( -iname "*.nsp" -o -iname "*.xci" -o -iname "*.nsz" -o -iname "*.xcz" \) -exec mv -f {} game_files/ \;
             rm -rf dlc_raw
@@ -347,8 +358,7 @@ workflows:
             download_any "$VH_URL" "vh_raw" "false"
             mkdir -p vh_raw/unpacked
             while IFS= read -r -d '' arc; do
-              7z x -y "$arc" -ovh_raw/unpacked >/dev/null
-              rm -f "$arc"
+              extract_archive "$arc" "vh_raw/unpacked"
             done < <(find vh_raw -maxdepth 3 -type f \( -iname "*.zip" -o -iname "*.rar" -o -iname "*.7z" \) -print0)
           fi
           df -h /
